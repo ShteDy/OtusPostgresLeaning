@@ -139,6 +139,46 @@ testdb=>
 You are now connected to database "testdb" as user "postgres".
 testdb=# ALTER default privileges in SCHEMA testnm grant SELECT on TABLES to readonly; 
 ALTER DEFAULT PRIVILEGES
+testdb=> select * from testnm.t1;
+ERROR:  permission denied for table t1
+#т.к ALTER DEFAULT PRIVILEGES применим только для новых объектов. Нужно перевыдать права или пересоздать таблицу
+testdb=> \c testdb postgres
+You are now connected to database "testdb" as user "postgres".
+testdb=# drop table testnm.t1
+testdb-# ;
+DROP TABLE
+testdb=# CREATE TABLE testnm.t1(c1 integer);
+CREATE TABLE
+INSERT INTO testnm.t1 values(1);
+INSERT 0 1
+testdb=# \c testdb testreader
+Password for user testreader: 
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  password authentication failed for user "testreader"
+Previous connection kept
+testdb=# \c testdb testreader
+Password for user testreader: 
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  password authentication failed for user "testreader"
+Previous connection kept
+testdb=# \c testdb testread
+Password for user testread: 
+You are now connected to database "testdb" as user "testread".
+testdb=> select * from t1;
+ERROR:  relation "t1" does not exist
+LINE 1: select * from t1;
+                      ^
+testdb=> select * from testnm.t1;
+ c1 
+----
+  1
+(1 row)
 
+testdb=> 
+# теперь данные видны
+
+#теперь попробуем создать таблицу
+testdb=> create table t2(c1 integer); 
+ERROR:  permission denied for schema public
+LINE 1: create table t2(c1 integer);
+#права создания по умолчнию даются только на схему public. 
 
 
