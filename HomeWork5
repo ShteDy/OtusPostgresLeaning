@@ -1,1 +1,144 @@
+#Установим Postgres 14
+sudo apt update
+sudo apt install postgresql-14
+
+#Создадим Базу testdb, в ней схему testnm, в ней таблицу t1 с колонкой c1 с типом поля int, и вставим туда строчку
+      postgres=# CREATE DATABASE testdb;
+      CREATE DATABASE
+      postgres=# \c
+      You are now connected to database "postgres" as user "postgres".
+      postgres=# \c testdb
+      You are now connected to database "testdb" as user "postgres".
+      testdb=# CREATE SCHEMA testnm;
+      CREATE SCHEMA
+      testdb=# CREATE TABLE t1(c1 integer);
+      CREATE TABLE
+      testdb=# INSERT INTO t1 values(1);
+      INSERT 0 1
+      testdb=# select * from t1;
+       c1 
+      ----
+        1
+      (1 row)
+      
+      testdb=# 
+#Создадим роль readonly с доступом к базе testdb таблице testnm.t1 с правами select
+      testdb=# CREATE role readonly;
+      CREATE ROLE
+      testdb=# grant connect on DATABASE testdb TO readonly;
+      GRANT
+      testdb=# grant usage on SCHEMA testnm to readonly;
+      GRANT
+      testdb=# grant SELECT on all TABLEs in SCHEMA testnm TO readonly;
+      GRANT
+      testdb=# 
+# Создадим пользователя testread с паролем test123. Дадим роль readonly и подключимся под ним к БД
+testdb=# CREATE role readonly;
+CREATE ROLE
+testdb=# grant connect on DATABASE testdb TO readonly;
+GRANT
+testdb=# grant usage on SCHEMA testnm to readonly;
+GRANT
+testdb=# grant SELECT on all TABLEs in SCHEMA testnm TO readonly;
+GRANT
+testdb=# CREATE USER testread with password 'test123';
+CREATE ROLE
+testdb=# grant readonly TO testread;
+GRANT ROLE
+testdb=# \c testdb testread
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  Peer authentication failed for user "testread"
+Previous connection kept
+testdb=# \q
+# Сменим аутентификацию с sha256 на md5 в файле pg_hba.conf
+ubuntu@otuscoursepostgre2:~$ sudo nano /etc/postgresql/14/main/pg_hba.conf
+# DO NOT DISABLE!
+# If you change this first entry you will need to make sure that the
+# database superuser can access the database using some other method.
+# Noninteractive access to all databases is required during automatic
+# maintenance (custom daily cronjobs, replication, and similar tasks).
+#
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     md5
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            md5
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+
+
+# Рестартанем сервер
+ubuntu@otuscoursepostgre2:~$ sudo systemctl restart postgresql@14-main
+#подключимся к бд от юзера testread
+ubuntu@otuscoursepostgre2:~$ sudo -u postgres psql
+could not change directory to "/home/ubuntu": Permission denied
+psql (14.9 (Ubuntu 14.9-1.pgdg22.04+1))
+Type "help" for help.
+
+postgres=# \c testdb testread
+Password for user testread: 
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  password authentication failed for user "testread"
+Previous connection kept
+postgres=# \c testdb testread
+Password for user testread: 
+You are now connected to database "testdb" as user "testread".
+testdb=>  SELECT * FROM t1;
+ERROR:  permission denied for table t1
+testdb=> 
+#таблица была создана в дефолтной схеме public в бд testdb(см строки 14 и 15)
+testdb=> /dt
+testdb-> \dt
+        List of relations
+ Schema | Name | Type  |  Owner   
+--------+------+-------+----------
+ public | t1   | table | postgres
+(1 row)
+
+testdb-> ;
+ERROR:  syntax error at or near "/"
+LINE 1: /dt
+        ^
+testdb=> 
+#видна таблица в схеме паблик, но у юзера testread нет туда доступа
+testdb=> \dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ public | postgres
+ testnm | postgres
+(2 rows)
+
+testdb=> 
+#видна схема к которой выдан доступ для юзера testread
+#СОздадим таблицу в нужной нам схеме и зальем строчку
+testdb=> \c testdb postgres
+You are now connected to database "testdb" as user "postgres".
+testdb=# CREATE TABLE testnm.t1(c1 integer);
+CREATE TABLE
+testdb=# INSERT INTO testnm.t1 values(1);
+INSERT 0 1
+testdb=# \c testuser
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  database "testuser" does not exist
+Previous connection kept
+testdb=# \c testdb testread
+Password for user testread: 
+You are now connected to database "testdb" as user "testread".
+testdb=> select * from t1;
+ERROR:  permission denied for table t1
+testdb=> select * from testnm.t1;
+ERROR:  permission denied for table t1
+testdb=> 
+#доступа нет, т.к. гранты на схему выдавались ДО создания табицы, нужно пересоздать гранты
+You are now connected to database "testdb" as user "postgres".
+testdb=# ALTER default privileges in SCHEMA testnm grant SELECT on TABLES to readonly; 
+ALTER DEFAULT PRIVILEGES
+
+
 
