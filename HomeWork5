@@ -176,9 +176,39 @@ testdb=>
 # теперь данные видны
 
 #теперь попробуем создать таблицу
+testdb=# \c testdb testread
+Password for user testread: 
+You are now connected to database "testdb" as user "testread".
 testdb=> create table t2(c1 integer); 
+CREATE TABLE
+testdb=> insert into t2 values (2);
+INSERT 0 1
+testdb=> 
+#у пользователя testread по умолчанию есть права на создание таблиц в схеме public. можно забрать эти прва следующим скриптом под суперюзером:
+
+testdb=> \c testdb postgres
+You are now connected to database "testdb" as user "postgres".
+testdb=# revoke ALL on DATABASE testdb to  public; 
+ERROR:  syntax error at or near "to"
+LINE 1: revoke ALL on DATABASE testdb to  public;
+                                      ^
+testdb=# revoke ALL on DATABASE testdb from public; 
+REVOKE
+testdb=# revoke CREATE on SCHEMA public from public;
+REVOKE
+testdb=# \c testdb testread
+Password for user testread: 
+connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  password authentication failed for user "testread"
+Previous connection kept
+testdb=# \c testdb testread
+Password for user testread: 
+You are now connected to database "testdb" as user "testread".
+testdb=> create table t3(c1 integer); 
 ERROR:  permission denied for schema public
-LINE 1: create table t2(c1 integer);
-#права создания по умолчнию даются только на схему public. 
+LINE 1: create table t3(c1 integer);
+                     ^
+testdb=> 
+
+
 
 
