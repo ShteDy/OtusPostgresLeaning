@@ -208,7 +208,7 @@ ERROR:  permission denied for schema public
 LINE 1: create table t3(c1 integer);
                      ^
 testdb=> 
-
+# теперь у пользователей нет прав на создание объектов в схеме public. можно работать с пользовательскими схемами и регулировать права именно в них
 
 
 
