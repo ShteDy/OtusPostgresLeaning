@@ -90,3 +90,167 @@ latency average = 16.009 ms
 latency stddev = 6.358 ms
 initial connection time = 26.136 ms
 tps = 499.282079 (without initial connection time)
+
+# особых изменений при перзапуске PGBENCH не замечено, возможно причина во времени работы утилиты(всего 60 минут)
+# По факту были серьезно изменены параметры сервера, а именно, размер shaped_buffers (стал занимать 25% от общей памяти ОС, что сообтветсвует лучшим практикам)
+# также изменены минимальный и максимальный размер файлов журнала транзакций, что серьезно влияет на загрузку дискового массива.
+# видно что число обработанных трназакций примерно одинаковое 29867 и 29955, соответсвенно количество транзакций в секунду +- одинаковые 497 и 499
+
+
+# создадим таблицу test, наполним ее данными и выясним размер таблицы
+ubuntu@otuscoursepostgre2:~$ sudo -u postgres psql
+could not change directory to "/home/ubuntu": Permission denied
+psql (15.4 (Ubuntu 15.4-2.pgdg22.04+1))
+Type "help" for help.
+
+postgres=# create table test(id serial, text text)
+postgres-# ;
+CREATE TABLE
+postgres=# \dt
+              List of relations
+ Schema |       Name       | Type  |  Owner   
+--------+------------------+-------+----------
+ public | pgbench_accounts | table | postgres
+ public | pgbench_branches | table | postgres
+ public | pgbench_history  | table | postgres
+ public | pgbench_tellers  | table | postgres
+ public | test             | table | postgres
+(5 rows)
+
+postgres=# inset into test(text) select 'random_data' from generate_series(1,1000000);
+ERROR:  syntax error at or near "inset"
+LINE 1: inset into test(text) select 'random_data' from generate_ser...
+        ^
+postgres=# insert into test(text) select 'random_data' from generate_series(1,1000000);
+INSERT 0 1000000
+postgres=# \dt+ test
+                                  List of relations
+ Schema | Name | Type  |  Owner   | Persistence | Access method | Size  | Description 
+--------+------+-------+----------+-------------+---------------+-------+-------------
+ public | test | table | postgres | permanent   | heap          | 42 MB | 
+(1 row)
+
+postgres=# 
+# обновим данные в таблице и посмотрим ее объем
+postgres=# update test set text = 'random_data2';
+UPDATE 1000000
+postgres=# update test set text = 'random_data3';
+UPDATE 1000000
+postgres=# update test set text = 'random_data4';
+UPDATE 1000000
+postgres=# update test set text = 'random_data5';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over';
+UPDATE 1000000
+postgres=# \dt+ test
+                                   List of relations
+ Schema | Name | Type  |  Owner   | Persistence | Access method |  Size  | Description 
+--------+------+-------+----------+-------------+---------------+--------+-------------
+ public | test | table | postgres | permanent   | heap          | 229 MB | 
+(1 row)
+
+postgres=# 
+select c.relname,
+current_setting('autovacuum_vacuum_threshold') as av_base_thresh,
+current_setting('autovacuum_vacuum_scale_factor') as av_scale_factor,
+(current_setting('autovacuum_vacuum_threshold')::int +
+(current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples)) as av_thresh,
+s.n_dead_tup
+from pg_stat_user_tables s join pg_class c ON s.relname = c.relname
+where s.n_dead_tup > (current_setting('autovacuum_vacuum_threshold')::int
++ (current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples));
+ relname | av_base_thresh | av_scale_factor | av_thresh | n_dead_tup 
+---------+----------------+-----------------+-----------+------------
+ test    | 50             | 0.2             |    200050 |    3999454
+(1 row)
+
+postgres=# 
+# количество мертвых записей пока не прошел autovacuum  3999454
+
+
+postgres=# SELECT schemaname, relname, last_autovacuum
+FROM pg_stat_user_tables
+WHERE schemaname = 'public' AND relname = 'test';
+ schemaname | relname |        last_autovacuum        
+------------+---------+-------------------------------
+ public     | test    | 2023-10-17 13:02:18.207044+00
+(1 row)
+
+postgres=#                                            
+select c.relname,
+current_setting('autovacuum_vacuum_threshold') as av_base_thresh,
+current_setting('autovacuum_vacuum_scale_factor') as av_scale_factor,
+(current_setting('autovacuum_vacuum_threshold')::int +
+(current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples)) as av_thresh,
+s.n_dead_tup
+from pg_stat_user_tables s join pg_class c ON s.relname = c.relname
+where s.n_dead_tup > (current_setting('autovacuum_vacuum_threshold')::int
++ (current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples));
+ relname | av_base_thresh | av_scale_factor | av_thresh | n_dead_tup 
+---------+----------------+-----------------+-----------+------------
+(0 rows)
+
+postgres=# 
+# За это время по доблице прошел тред autovacuum и количество метвых точек ушло
+
+# Отключим автовакуум на таблице test
+
+postgres=# ALTER TABLE test SET (autovacuum_enabled = off);
+ALTER TABLE
+postgres=# 
+#обновим записи и посмотрим размер таблицы
+postgres=# ALTER TABLE test SET (autovacuum_enabled = off);
+ALTER TABLE
+postgres=# update test set text = 'random_data_over1';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over21';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over3';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over43';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over53';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over6';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over7';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over87';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_over9';
+UPDATE 1000000
+postgres=# update test set text = 'random_data_ove109';
+UPDATE 1000000
+postgres=# \dt+ test                                  
+                                   List of relations
+ Schema | Name | Type  |  Owner   | Persistence | Access method |  Size  | Description 
+--------+------+-------+----------+-------------+---------------+--------+-------------
+ public | test | table | postgres | permanent   | heap          | 547 MB | 
+(1 row)
+
+postgres=# 
+ №547 мегабайта стала весить. количество мертвых записей:
+ relname | av_base_thresh | av_scale_factor | av_thresh | n_dead_tup 
+---------+----------------+-----------------+-----------+------------
+ test    | 50             | 0.2             |    200050 |    9996973
+
+# autovacuum отключен, удалять их некому.
+
+# если выполнить вручную команду vacuum, то мертвые строки удалятся и появится свободное место в базе:
+postgres=# vacuum
+postgres-# ;
+VACUUM
+postgres=#       
+select c.relname,
+current_setting('autovacuum_vacuum_threshold') as av_base_thresh,
+current_setting('autovacuum_vacuum_scale_factor') as av_scale_factor,
+(current_setting('autovacuum_vacuum_threshold')::int +
+(current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples)) as av_thresh,
+s.n_dead_tup
+from pg_stat_user_tables s join pg_class c ON s.relname = c.relname
+where s.n_dead_tup > (current_setting('autovacuum_vacuum_threshold')::int
++ (current_setting('autovacuum_vacuum_scale_factor')::float * c.reltuples));
+ relname | av_base_thresh | av_scale_factor | av_thresh | n_dead_tup 
+---------+----------------+-----------------+-----------+------------
+(0 rows)
+
