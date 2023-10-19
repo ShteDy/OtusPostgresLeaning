@@ -1,0 +1,18 @@
+#Работа с журналами и контрольными точками
+
+#изменим в файле в postgresql.conf регулярность операции checkpoint с 5 минут до 30 секунд
+ubuntu@otuscoursepostgre2:/etc/postgresql/15/main$ sudo nano ./postgresql.conf 
+# - Checkpoints -
+
+checkpoint_timeout = 30s                # range 30s-1d
+checkpoint_completion_target = 0.9      # checkpoint target duration, 0.0 - 1.0
+#checkpoint_flush_after = 256kB         # measured in pages, 0 disables
+#checkpoint_warning = 30s               # 0 disables
+
+#дадим нагрузку помощью утилиты pgbench  
+ubuntu@otuscoursepostgre2:~$ sudo -u postgres pgbench -c40 -P 6 -T 600 -U postgres postgres
+pgbench (15.4 (Ubuntu 15.4-2.pgdg22.04+1))
+starting vacuum...end.
+....
+...
+....
