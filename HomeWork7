@@ -8,11 +8,77 @@ checkpoint_timeout = 30s                # range 30s-1d
 checkpoint_completion_target = 0.9      # checkpoint target duration, 0.0 - 1.0
 #checkpoint_flush_after = 256kB         # measured in pages, 0 disables
 #checkpoint_warning = 30s               # 0 disables
+#Рестартуем кластер
+ubuntu@otuscoursepostgre2:~$ sudo systemctl restart postgresql
+ubuntu@otuscoursepostgre2:~$ 
 
 #дадим нагрузку помощью утилиты pgbench  
+
 ubuntu@otuscoursepostgre2:~$ sudo -u postgres pgbench -c40 -P 6 -T 600 -U postgres postgres
 pgbench (15.4 (Ubuntu 15.4-2.pgdg22.04+1))
 starting vacuum...end.
+progress: 6.0 s, 478.3 tps, lat 81.129 ms stddev 61.758, 0 failed
+progress: 12.0 s, 493.8 tps, lat 81.020 ms stddev 61.837, 0 failed
+
 ....
 ...
 ....
+progress: 600.0 s, 496.2 tps, lat 80.784 ms stddev 57.450, 0 failed
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 40
+number of threads: 1
+maximum number of tries: 1
+duration: 600 s
+number of transactions actually processed: 294680
+number of failed transactions: 0 (0.000%)
+latency average = 81.434 ms
+latency stddev = 60.072 ms
+initial connection time = 119.424 ms
+tps = 491.137385 (without initial connection time)
+ubuntu@otuscoursepostgre2:~$ 
+
+
+#за 10 минут нагрузки объем каталога pg_wal увеличился до 65 Мб:
+postgres@otuscoursepostgre2:~/15/main$   du -hs pg_wal
+65M	pg_wal
+
+postgres@otuscoursepostgre2:~/15/main$ 
+#можно посмотреть размер через psql^
+postgres=# select * from pg_ls_waldir() limit 10
+postgres-# ;
+           name           |   size   |      modification      
+--------------------------+----------+------------------------
+ 000000010000000000000020 | 16777216 | 2023-10-20 10:23:32+00
+ 00000001000000000000001E | 16777216 | 2023-10-20 10:22:37+00
+ 00000001000000000000001D | 16777216 | 2023-10-20 10:25:38+00
+ 00000001000000000000001F | 16777216 | 2023-10-20 10:23:04+00
+(4 rows)
+
+postgres=# 
+
+# за 10 минут было пройдено 20 контрольных точек(checkpoint_timeout = 30s ). размер сгенеренных WAL на конторольную точку - 65000/20=3,25 МБ 
+
+# Посмотрим статистику создания контрольных точек
+postgres=# select * from pg_stat_bgwriter \gx
+-[ RECORD 1 ]---------+------------------------------
+checkpoints_timed     | 281
+checkpoints_req       | 1
+checkpoint_write_time | 565253
+checkpoint_sync_time  | 533
+buffers_checkpoint    | 44633
+buffers_clean         | 0
+maxwritten_clean      | 0
+buffers_backend       | 3940
+buffers_backend_fsync | 0
+buffers_alloc         | 6577
+stats_reset           | 2023-10-20 10:11:02.262653+00
+
+postgres=# 
+
+
+# всего записанных страниц на диск buffers_checkpoint  44633  | checkpoints_timed  281  чекпойнт срабатывал по таймеру(накопительная инфа) | checkpoints_req  =1 чекпойн сработал в связи с активной работой с таблицей | checkpoint_sync_time  533 общее время затраченное на чекпоинты в милисекундах
+# т.е. у нас  281 чекпонт / 533 = ~ 0.5 мс на один чекпоинт
+
+
