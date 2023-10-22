@@ -82,3 +82,186 @@ postgres=#
 # т.е. у нас  281 чекпонт / 533 = ~ 0.5 мс на один чекпоинт
 
 
+# Сравним утилитой PGBENCH разницу мегжду включенным AUTOCOMMIT и выключенным
+
+scaling factor: 1
+query mode: simple
+number of clients: 1
+number of threads: 1
+maximum number of tries: 1
+duration: 10 s
+number of transactions actually processed: 5039
+number of failed transactions: 0 (0.000%)
+latency average = 1.983 ms
+latency stddev = 0.520 ms
+initial connection time = 3.945 ms
+tps = 504.015067 (without initial connection time)
+
+postgres=# ALTER SYSTEM SET synchronous_commit = off;
+ALTER SYSTEM
+postgres=# \q
+postgres@otuscoursepostgre2:~/15/main$ exit
+exit
+ubuntu@otuscoursepostgre2:~$ sudo systemctl restart postgresql
+ubuntu@otuscoursepostgre2:~$ sudo su postgres
+postgres@otuscoursepostgre2:/home/ubuntu$ pgbench -P 1 -T 10
+pgbench (15.4 (Ubuntu 15.4-2.pgdg22.04+1))
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 1
+number of threads: 1
+maximum number of tries: 1
+duration: 10 s
+number of transactions actually processed: 19260
+number of failed transactions: 0 (0.000%)
+latency average = 0.519 ms
+latency stddev = 0.081 ms
+initial connection time = 4.854 ms
+tps = 1926.869789 (without initial connection time)
+postgres@otuscoursepostgre2:/home/ubuntu$ 
+
+
+# при отключенном AUTOCOMMIT tps(транзакций в секунду) увеличился с 501 до 1926 
+# есть два варианта фиксации транзакции, синхронная - более медланная, но с уверностью в том что запись надежная и мы не потеряем данные. или же быстрая, как во втором варианте с отключенным синхронным коммитом, но с возможностью потери части транзакций. на более медленных дисках при синхронном коммите запись медленее на порядок
+
+
+# контрольная сумма
+# Проверим включена ли:
+
+postgres=# show data_checksums;
+ data_checksums 
+----------------
+ off
+(1 row)
+
+#остановим кластер
+#Включем контрольную сумму
+ubuntu@otuscoursepostgre2:~$ sudo su - postgres -c '/usr/lib/postgresql/15/bin/pg_checksums --enable -D "/var/lib/postgresql/15/main"'
+Checksum operation completed
+Files scanned:   961
+Blocks scanned:  5186
+Files written:  793
+Blocks written: 5186
+pg_checksums: syncing data directory
+pg_checksums: updating control file
+Checksums enabled in cluster
+ubuntu@otuscoursepostgre2:~$ 
+
+#включим кластер
+ubuntu@otuscoursepostgre2:~$ sudo systemctl start postgresql
+ubuntu@otuscoursepostgre2:~$ sudo su postgres
+postgres@otuscoursepostgre2:/home/ubuntu$ psql
+could not change directory to "/home/ubuntu": Permission denied
+psql (15.4 (Ubuntu 15.4-2.pgdg22.04+1))
+Type "help" for help.
+
+postgres=# show data_checksums;
+ data_checksums 
+----------------
+ on
+(1 row)
+
+postgres=# 
+#создадим табличку и вставим данные
+postgres=# create table t1(t varchar)
+;
+CREATE TABLE
+postgres=# insert into t1 values ('dataloss');
+INSERT 0 1
+postgres=# select * from t1;
+    t     
+----------
+ dataloss
+(1 row)
+
+postgres=# 
+
+#узнаем номер LSN 
+postgres=# SELECT pg_current_wal_insert_lsn();
+ pg_current_wal_insert_lsn 
+---------------------------
+ 0/20E732F0
+(1 row)
+# Выполним чекпоинт
+postgres=# checkpoint;
+CHECKPOINT
+postgres=# SELECT pg_current_wal_insert_lsn();
+ pg_current_wal_insert_lsn 
+---------------------------
+ 0/20E758C0
+(1 row)
+
+#И проверим LSN - он поменялся
+
+#сделаем вставку данных и одновременно убьем процес postgres в ОС
+postgres=# insert into t1(t) select 'сбой' from generate_series(1,100000)
+;
+INSERT 0 100000
+ubuntu@otuscoursepostgre2:~$ sudo pkill -9 postgres
+ubuntu@otuscoursepostgre2:~$ sudo /usr/lib/postgresql/15/bin/pg_controldata /var/lib/postgresql/15/main
+pg_control version number:            1300
+Catalog version number:               202209061
+Database system identifier:           7291981139536038147
+Database cluster state:               in production
+
+#статус postgres в логе будет - in prodaction
+# но по факту кластер не работает - down, т.к. его работу завершили максимально жестко, на уровне ОС
+ubuntu@otuscoursepostgre2:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+15  main    5432 down   postgres /var/lib/postgresql/15/main /var/log/postgresql/postgresql-15-main.log
+ubuntu@otuscoursepostgre2:~$ 
+#запуустим кластер и посмотрим его журнал
+ubuntu@otuscoursepostgre2:~$ sudo pg_ctlcluster 15 main start -m immediate
+ubuntu@otuscoursepostgre2:~$ /var/log/postgresql/postgresql-15-main.log
+-bash: /var/log/postgresql/postgresql-15-main.log: Permission denied
+ubuntu@otuscoursepostgre2:~$ cat /var/log/postgresql/postgresql-15-main.log
+2023-10-22 13:26:26.531 UTC [102978] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2023-10-22 13:26:26.535 UTC [102978] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2023-10-22 13:26:26.546 UTC [102981] LOG:  database system was interrupted; last known up at 2023-10-22 13:19:58 UTC
+2023-10-22 13:26:26.609 UTC [102981] LOG:  database system was not properly shut down; automatic recovery in progress
+2023-10-22 13:26:26.615 UTC [102981] LOG:  redo starts at 0/20E758C0
+2023-10-22 13:26:26.692 UTC [102981] LOG:  invalid record length at 0/21494B80: wanted 24, got 0
+2023-10-22 13:26:26.692 UTC [102981] LOG:  redo done at 0/21494B48 system usage: CPU: user: 0.05 s, system: 0.02 s, elapsed: 0.07 s
+2023-10-22 13:26:26.700 UTC [102979] LOG:  checkpoint starting: end-of-recovery immediate wait
+2023-10-22 13:26:26.738 UTC [102979] LOG:  checkpoint complete: wrote 544 buffers (3.3%); 0 WAL file(s) added, 0 removed, 1 recycled; write=0.012 s, sync=0.010 s, total=0.043 s; sync files=4, longest=0.004 s, average=0.003 s; distance=6268 kB, estimate=6268 kB
+
+# после аварийного отключения - система востановилась к последнему Checkpont'у
+# повредим данные на физическом уровне
+postgres=#  SELECT pg_relation_filepath('t1');
+ pg_relation_filepath 
+----------------------
+ base/5/16417
+(1 row)
+
+#остановим кластер, повредим файлик и заново запустим
+ubuntu@otuscoursepostgre2:~$ sudo pg_ctlcluster 15 main stop
+postgres@otuscoursepostgre2:~/15/main/base/5$ dd if=/dev/zero of=/var/lib/postgresql/15/main/base/5/16417 oflag=dsync conv=notrunc bs=1 count=8
+8+0 records in
+8+0 records out
+8 bytes copied, 0.0111959 s, 0.7 kB/s
+postgres@otuscoursepostgre2:~/15/main/base/5$ 
+ubuntu@otuscoursepostgre2:~$ sudo pg_ctlcluster 15 main start
+ubuntu@otuscoursepostgre2:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+15  main    5432 online postgres /var/lib/postgresql/15/main /var/log/postgresql/postgresql-15-main.log
+ubuntu@otuscoursepostgre2:~$ 
+#получим ошибку сверки контрольной суммы, и сообщение о повреждении страницы 
+postgres=# select * from t1;
+WARNING:  page verification failed, calculated checksum 26907 but expected 45768
+ERROR:  invalid page in block 0 of relation base/5/16417
+postgres=# 
+
+#Решить можно таким обазом
+postgres=# SET zero_damaged_pages = on;
+SET
+postgres=# select * from t1;
+WARNING:  page verification failed, calculated checksum 26907 but expected 45768
+WARNING:  invalid page in block 0 of relation base/5/16417; zeroing out page
+  t   
+------
+ сбой
+(1 row)
+
+postgres=# 
+# однако на физическом уровне ошибка остается, и правильным ходом будет восстановление из резервной копии
