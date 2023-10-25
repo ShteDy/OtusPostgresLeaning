@@ -20,7 +20,6 @@ postgres=#
 ## смоделируем запись в журнале, создадим таблицу, добавим в нее данные, проапдейтим ее строку в одной сессии, и ту же строку в другой
 ```bash
 CREATE DATABASE locks
-
 postgres=# \c locks
 You are now connected to database "locks" as user "postgres".
 locks=# CREATE TABLE accounts(
@@ -46,6 +45,7 @@ locks=#
 ```
 
 вторая сессия
+
 ```bash
 locks=# BEGIN;
 UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 1;
