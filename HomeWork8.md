@@ -118,7 +118,6 @@ locks=*#  SELECT blocked_locks.pid     AS blocked_pid,
 
 (2 rows)
 
-~
-~
 
+## vfv
 
