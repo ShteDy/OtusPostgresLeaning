@@ -121,5 +121,53 @@ locks=*#  SELECT blocked_locks.pid     AS blocked_pid,
 | (2 rows)                                                                                                                                                                                                                          |   |
 
 
-## vfv
+## из запроса к представлениею pg_locks можно определить, что к таблице accounts pid  123353 и 123143 ожидают окончания ExclusiveLock, первого запроса(123173), но т.к. сами планирую изменять строку ухе навесили блокировку row exclusive lock(выглядит так - я не знаю что буду менять, так до меня еще поменяют, но точно буду)
+
+```bash
+locks=*# select l.database, d.datname, l.relation, c.relname,
+l.locktype,                                        
+l.virtualxid, l.virtualtransaction, l.transactionid,
+l.pid, l.mode, l.granted,
+c.relacl                                                
+from pg_locks as l                                                         
+LEFT JOIN pg_database AS d ON l.database= d.oid
+LEFT JOIN pg_class AS c ON l.relation = c.oid
+
+```
+
+| database \| datname \| relation \|              relname              \|   locktype    \| virtualxid \| virtualtransaction \| transactionid \|  pid   \|       mode       \| granted \|                 relacl               |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----------+---------+----------+-----------------------------------+---------------+------------+--------------------+---------------+--------+------------------+---------+-----------------------------------------       |
+| 16388 \| locks   \|    16453 \| accounts                          \| tuple         \|            \| 6/14               \|               \| 123353 \| ExclusiveLock    \| f       \|                                         |
+| 16388 \| locks   \|    16453 \| accounts                          \| relation      \|            \| 4/83               \|               \| 123137 \| RowExclusiveLock \| t       \|                                         |
+| 16388 \| locks   \|    16453 \| accounts                          \| tuple         \|            \| 5/29               \|               \| 123143 \| ExclusiveLock    \| t       \|                                         |
+| 16388 \| locks   \|    16453 \| accounts                          \| relation      \|            \| 5/29               \|               \| 123143 \| RowExclusiveLock \| t       \|                                         |
+| 16388 \| locks   \|    16453 \| accounts                          \| relation      \|            \| 6/14               \|               \| 123353 \| RowExclusiveLock \| t       \|                                         |
+| 16388 \| locks   \|    16458 \| accounts_pkey                     \| relation      \|            \| 5/29               \|               \| 123143 \| RowExclusiveLock \| t       \|                                         |
+| 16388 \| locks   \|    16458 \| accounts_pkey                     \| relation      \|            \| 6/14               \|               \| 123353 \| RowExclusiveLock \| t       \|                                         |
+| 16388 \| locks   \|    16458 \| accounts_pkey                     \| relation      \|            \| 4/83               \|               \| 123137 \| RowExclusiveLock \| t       \|                                         |
+| 0 \|         \|     1260 \| pg_authid                         \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \| {postgres=arwdDxt/postgres}                 |
+| 0 \|         \|     2677 \| pg_authid_oid_index               \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                             |
+| 0 \|         \|     2676 \| pg_authid_rolname_index           \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                             |
+| 16388 \| locks   \|     1259 \| pg_class                          \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \| {postgres=arwdDxt/postgres,=r/postgres} |
+| 16388 \| locks   \|     2662 \| pg_class_oid_index                \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                         |
+| 16388 \| locks   \|     2663 \| pg_class_relname_nsp_index        \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                         |
+| 16388 \| locks   \|     3455 \| pg_class_tblspc_relfilenode_index \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                         |
+| 0 \|         \|     1262 \| pg_database                       \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \| {postgres=arwdDxt/postgres,=r/postgres}     |
+| 0 \|         \|     2671 \| pg_database_datname_index         \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                             |
+| 0 \|         \|     2672 \| pg_database_oid_index             \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \|                                             |
+| 16388 \| locks   \|    12073 \| pg_locks                          \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \| {postgres=arwdDxt/postgres,=r/postgres} |
+| 16388 \| locks   \|    12222 \| pg_stat_activity                  \| relation      \|            \| 4/83               \|               \| 123137 \| AccessShareLock  \| t       \| {postgres=arwdDxt/postgres,=r/postgres} |
+| \|         \|          \|                                   \| virtualxid    \| 5/29       \| 5/29               \|               \| 123143 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| transactionid \|            \| 4/83               \|           805 \| 123137 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| virtualxid    \| 6/14       \| 6/14               \|               \| 123353 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| transactionid \|            \| 6/14               \|           807 \| 123353 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| transactionid \|            \| 5/29               \|           806 \| 123143 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| virtualxid    \| 4/83       \| 4/83               \|               \| 123137 \| ExclusiveLock    \| t       \|                                               |
+| \|         \|          \|                                   \| transactionid \|            \| 5/29               \|           805 \| 123143 \| ShareLock        \| f       \|                                               |
+| (27 rows)                                                                                                                                                                                                                   |
+
+
+## 3.Взаимоблокировка трех транзакций
+
 
