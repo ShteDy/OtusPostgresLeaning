@@ -44,3 +44,22 @@ COMMIT;
 COMMIT
 locks=# 
 '''
+
+вторая сессия
+'''bash
+locks=# BEGIN;
+UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 1;
+BEGIN
+UPDATE 1
+locks=*# COMMIT;
+COMMIT
+locks=# 
+'''
+
+проверим журнал сервера
+'''bash
+ubuntu@otuscoursepostgre2:~$ cat /var/log/postgresql/postgresql-15-main.log | grep deadlock
+2023-10-24 07:55:17.601 UTC [114085] LOG:  parameter "deadlock_timeout" changed to "200"
+2023-10-25 17:53:39.852 UTC [123137] postgres@locks ERROR:  deadlock detected
+ubuntu@otuscoursepostgre2:~$ 
+''
