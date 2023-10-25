@@ -111,12 +111,14 @@ locks=*#  SELECT blocked_locks.pid     AS blocked_pid,
 
 ```
 
- blocked_pid | blocked_user | blocking_pid | blocking_user |                       blocked_statement                        |                               current_statement_in_blocking_process                                
--------------+--------------+--------------+---------------+----------------------------------------------------------------+----------------------------------------------------------------------------------------------------
-      123353 | postgres     |       123143 | postgres      | UPDATE accounts SET amount = amount + 10.00 WHERE acc_no = 2;  | UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 2;
-      123143 | postgres     |       123137 | postgres      | UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 2; | SELECT blocked_locks.pid     AS blocked_pid,                                                      +
-
-(2 rows)
+| blocked_pid \| blocked_user \| blocking_pid \| blocking_user \|                       blocked_statement                        \|                               current_statement_in_blocking_process                             |   |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---|
+| -------------+--------------+--------------+---------------+----------------------------------------------------------------+---------------------------------------------------------------------------------------------------- |   |
+| 123353 \| postgres     \|       123143 \| postgres      \| UPDATE accounts SET amount = amount + 10.00 WHERE acc_no = 2;  \| UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 2;                                       |   |
+| 123143 \| postgres     \|       123137 \| postgres      \| UPDATE accounts SET amount = amount + 100.00 WHERE acc_no = 2; \| SELECT blocked_locks.pid     AS blocked_pid                                                          | + |
+|                                                                                                                                                                                                                                   |   |
+|                                                                                                                                                                                                                                   |   |
+| (2 rows)                                                                                                                                                                                                                          |   |
 
 
 ## vfv
