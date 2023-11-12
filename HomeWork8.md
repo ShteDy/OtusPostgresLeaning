@@ -169,5 +169,131 @@ LEFT JOIN pg_class AS c ON l.relation = c.oid
 
 
 ## 3.Взаимоблокировка трех транзакций
+создадим таблицу DATA и вставим в нее новые строки
+```bash
+postgres=# \c locks
+You are now connected to database "locks" as user "postgres".
+locks=# 
+locks=# 
+locks=# 
+locks=# CREATE TABLE DATA(ID INT PRIMARY KEY, TEXT TEXT)
+locks-# ;
+CREATE TABLE
+locks=# 
+locks=# insert into data values (1, 'first data');
+INSERT 0 1
+locks=# insert into data values (1, 'second data');
+ERROR:  duplicate key value violates unique constraint "data_pkey"
+DETAIL:  Key (id)=(1) already exists.
+locks=# insert into data values (2, 'second data');
+INSERT 0 1
+locks=# 
+locks=# insert into data values (3, 'third data');
+INSERT 0 1
+locks=# 
+
+```
+запустим три сессии 
+1
+```bash
+locks=# begin;
+locks=*# UPDATE data SET text = 'updated by session 1' WHERE id = 2;
+UPDATE 1
+locks=*# 
+locks=*# ;
+locks=*# commit;
+COMMIT
+locks=# begin;
+BEGIN
+locks=*# SELECT pg_backend_pid() as pid, txid_current() as tid;
+  pid   | tid 
+--------+-----
+ 235828 | 844
+(1 row)
+
+locks=*# select text from data where id = 1 for update;
+         text         
+----------------------
+ updated by session 3
+(1 row)
+
+locks=*# UPDATE data SET text = 'updated by session 1' WHERE id = 2;
+
+locks=*# 
+
+
+```
+
+2я сессия
+```bash
+locks=# begin;
+BEGIN
+locks=*# SELECT pg_backend_pid() as pid, txid_current() as tid;
+  pid   | tid 
+--------+-----
+ 235992 | 845
+(1 row)
+
+locks=*# select text from data where id = 2 for update;
+         text         
+----------------------
+ updated by session 1
+(1 row)
+
+locks=*# UPDATE data SET text = 'updated by session 2' WHERE id = 3;
+UPDATE 1
+locks=*# 
+
+```
+3я сессия
+```bash
+locks=# begin;
+BEGIN
+locks=*# SELECT pg_backend_pid() as pid, txid_current() as tid;
+  pid   | tid 
+--------+-----
+ 235983 | 846
+(1 row)
+
+locks=*# select text from data where id = 3 for update;
+         text         
+----------------------
+ updated by session 2
+(1 row)
+
+locks=*# UPDATE data SET text = 'updated by session 3' WHERE id = 1;
+ERROR:  deadlock detected
+DETAIL:  Process 235983 waits for ShareLock on transaction 844; blocked by process 235828.
+Process 235828 waits for ShareLock on transaction 845; blocked by process 235992.
+Process 235992 waits for ShareLock on transaction 846; blocked by process 235983.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (0,6) in relation "data"
+locks=!# 
+```
+
+первый процесс висит, третий словил дэдлок(и выдал сообщение об этом), а второй обновил строку
+в журнале наблюдаем сообщение о deadlock и ID транзакций
+postgres@otuscoursepostgre2:/home/ubuntu$  cat /var/log/postgresql/postgresql-15-main.log | grep deadlock
+2023-11-12 12:38:22.478 UTC [235983] postgres@locks LOG:  process 235983 detected deadlock while waiting for ShareLock on transaction 844 after 200.215 ms
+2023-11-12 12:38:22.478 UTC [235983] postgres@locks ERROR:  deadlock detected
+postgres@otuscoursepostgre2:/home/ubuntu$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
