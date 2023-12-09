@@ -20,4 +20,24 @@ ubuntu@etcd1-restored:~$ sudo -i
 root@etcd1-restored:~# apt update
 root@etcd1-restored:~# apt install etcd -y
 
+настройка представляет собой создания файла конфигурации
+
+nano /etc/default/etcd 
+
+по ссылке описание переменных - https://github.com/etcd-io/etcd/blob/main/etcd.conf.yml.sample в этом файле
+в моем файле они такие:
+ETCD_NAME="etcd1"
+ETCD_DATA_DIR="/var/lib/etcd/default"
+ETCD_HEARTBEAT_INTERVAL="1000"
+ETCD_ELECTION_TIMEOUT="5000"
+ETCD_LISTEN_PEER_URLS="http://10.0.0.29:2380"
+ETCD_LISTEN_CLIENT_URLS="http://10.0.0.29:2379,http://localhost:2379"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://10.0.0.29:2380"
+ETCD_INITIAL_CLUSTER="etcd1=http://10.0.0.29:2380,etcd2=http://10.0.0.31:2380,etcd3=http://10.0.0.20:2380"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_INITIAL_CLUSTER_TOKEN="postgrescluster"
+ETCD_ADVERTISE_CLIENT_URLS="http://10.0.0.29:2379"
+ETCD_ENABLE_V2="true"
+
+
 ```
