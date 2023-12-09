@@ -39,5 +39,36 @@ ETCD_INITIAL_CLUSTER_TOKEN="postgrescluster"
 ETCD_ADVERTISE_CLIENT_URLS="http://10.0.0.29:2379"
 ETCD_ENABLE_V2="true"
 
+на остальных серверах кластера меняются значения ETCD_NAME, ETCD_LISTEN_PEER_URLS, ETCD_LISTEN_CLIENT_URLS, ETCD_INITIAL_ADVERTISE_PEER_URLS, ETCD_ADVERTISE_CLIENT_URLS
+ETCD_INITIAL_CLUSTER_TOKEN на всех сервера кластера должен быть одинаковый
+
+после запуска etcd каждая из нод будет чувствовать себя отдельным кластером
+root@etcd1-restored:/var/lib/etcd/default# systemctl start etcd
+root@etcd1-restored:/var/lib/etcd/default# etcdctl cluster-health
+member 8e9e05c52164694d is healthy: got healthy result from http://localhost:2379
+cluster is healthy
+
+бля того чтоб их собрать воедино, нужно почистить каталог /var/lib/etcd/default/member/*
+root@etcd1-restored:/var/lib/etcd/default# rm -rf /var/lib/etcd/default/member/*
+а после перезапустить etcd
+root@etcd1-restored:/var/lib/etcd/default# systemctl restart etcd
+root@etcd1-restored:/var/lib/etcd/default# systemctl status etcd
+● etcd.service - etcd - highly-available key value store
+     Loaded: loaded (/lib/systemd/system/etcd.service; enabled; vendor preset: enabled)
+     Active: active (running) since Sat 2023-12-09 13:28:44 UTC; 3s ago
+       Docs: https://github.com/coreos/etcd
+             man:etcd
+   Main PID: 3625 (etcd)
+      Tasks: 9 (limit: 2282)
+     Memory: 3.8M
+     CGroup: /system.slice/etcd.service
+             └─3625 /usr/bin/etcd
+
+проверить количество узлов можно узлов кластера можно при помощи команды etcdctl, в нашем случае их должно быть 3
+root@etcd1:~# etcdctl cluster-health
+member 24c242139c616766 is healthy: got healthy result from http://10.0.0.20:2379
+member 2ed06313262270a9 is healthy: got healthy result from http://10.0.0.31:2379
+member 5f245f2264a3f06c is healthy: got healthy result from http://10.0.0.29:2379
+cluster is healthy
 
 ```
