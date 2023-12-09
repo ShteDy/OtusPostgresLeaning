@@ -73,7 +73,7 @@ cluster is healthy
 
 ```
 ## Установка Postgres
-Сроздадим 2 виртуальные машины, на которые поставим кластер PostgreSQL 16, а потом демон Patroni
+роздадим 2 виртуальные машины, на которые поставим кластер PostgreSQL 16, а потом демон Patroni
 ```bash
 ubuntu@patroni1:~$ sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 ubuntu@patroni1:~$ wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
@@ -84,9 +84,7 @@ ubuntu@patroni1:~$ sudo apt install postgresql-16 -y
 после установки останавливаем сервис Postgres и очищаем каталог с базой. далее данные отдаеются под управление демона Patroni
 ubuntu@etcd1-restored:~$ sudo systemctl stop postgresql
 ubuntu@etcd1-restored:~$ sudo rm -rf /var/lib/postgresql/16/main/*
-
+```
 ## Установка Python
 
 
-
-```
