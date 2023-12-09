@@ -19,4 +19,5 @@
 ubuntu@etcd1-restored:~$ sudo -i
 root@etcd1-restored:~# apt update
 root@etcd1-restored:~# apt install etcd -y
+
 ```
