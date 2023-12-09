@@ -73,7 +73,7 @@ cluster is healthy
 
 ```
 ## Установка Postgres
-роздадим 2 виртуальные машины, на которые поставим кластер PostgreSQL 16, а потом демон Patroni
+cоздадим 2 виртуальные машины, на которые поставим кластер PostgreSQL 16, а потом демон Patroni
 ```bash
 ubuntu@patroni1:~$ sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 ubuntu@patroni1:~$ wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
@@ -82,9 +82,67 @@ ubuntu@patroni1:~$ sudo apt update
 ubuntu@patroni1:~$ sudo apt install postgresql-16 -y
 
 после установки останавливаем сервис Postgres и очищаем каталог с базой. далее данные отдаеются под управление демона Patroni
-ubuntu@etcd1-restored:~$ sudo systemctl stop postgresql
-ubuntu@etcd1-restored:~$ sudo rm -rf /var/lib/postgresql/16/main/*
+ubuntu@patroni1:~$ sudo systemctl stop postgresql
+ubuntu@patroni1:~$ sudo rm -rf /var/lib/postgresql/16/main/*
 ```
 ## Установка Python
+Поскольку демон Patroni написан на питоне, необходимо утсновить питон и некоторые библиотеки
+```bash
+ubuntu@patroni1:~$ sudo apt install python3-pip -y
+ubuntu@patroni1:~$ sudo apt install python3-dev -y
+ubuntu@patroni1:~$ sudo apt install libpq-dev -y
+ubuntu@patroni1:~$ sudo pip install psycopg2
+```
+## Установка Patroni
+```bash
+ubuntu@patroni1:~$ sudo pip install patroni[etcd]
+ubuntu@patroni1:~$ sudo pip3 install patroni
+```
+создадим в ОС сервис patroni.service  пропишем его конфиг
+```bash
+ubuntu@etcd1-restored:~$ sudo systemctl edit --full --force patroni.service
+
+записываем конфиг
+# This is an example systemd config file for Patroni
+# You can copy it to "/etc/systemd/system/patroni.service",
+[Unit]
+Description=Runners to orchestrate a high-availability PostgreSQL
+After=syslog.target network.target
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+# Read in configuration file if it exists, otherwise proceed
+EnvironmentFile=-/etc/patroni_env.conf
+WorkingDirectory=~
+# Where to send early-startup messages from the server
+# This is normally controlled by the global default set by systemd
+#StandardOutput=syslog
+# Pre-commands to start watchdog device
+# Uncomment if watchdog is part of your patroni setup
+#ExecStartPre=-/usr/bin/sudo /sbin/modprobe softdog
+#ExecStartPre=-/usr/bin/sudo /bin/chown postgres /dev/watchdog
+# Start the patroni process
+ExecStart=/usr/local/bin/patroni /etc/patroni.yml
+# Send HUP to reload from patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+# only kill the patroni process, not it's children, so it will gracefully stop postgres
+KillMode=process
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=30
+# Do not restart the service if it crashes, we want to manually inspect database on failure
+Restart=no
+[Install]
+WantedBy=multi-user.target
+
+перезагружаем сервисы
+ubuntu@patroni1:~$ sudo systemctl daemon-reload
+
+
+
+
+```
+
+
 
 
