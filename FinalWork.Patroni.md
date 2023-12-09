@@ -20,7 +20,7 @@ ubuntu@etcd1-restored:~$ sudo -i
 root@etcd1-restored:~# apt update
 root@etcd1-restored:~# apt install etcd -y
 
-настройка представляет собой создания файла конфигурации
+настройка представляет собой создание файла конфигурации
 
 nano /etc/default/etcd 
 
