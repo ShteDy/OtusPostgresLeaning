@@ -309,6 +309,50 @@ ubuntu@patroni1:~$
 видим, что Patroni создал файлы базы данных. Если необходимо развернуть имеющуюся базу из резервной копии - можно развернуть также как обычно.
 Сервис Patroni заработал. Осталось предоставить к нему доступ
 ```
+## HAProxy
+```bash
+для организации доступа к кластеру Patroni установим HAProxy     
+
+ubuntu@patronidemo-haproxy1:~$sudo apt install haproxy -y
+правим конфиг
+ubuntu@patronidemo-haproxy1:~$sudo nano /etc/haproxy/haproxy.cfg
+global
+    maxconn 100
+
+defaults
+    log global
+    mode tcp
+    retries 2
+    timeout client 30m
+    timeout connect 4s
+    timeout server 30m
+    timeout check 5s
+
+listen stats
+    mode http
+    bind *:7000
+    stats enable
+    stats uri /
+
+listen postgres
+    bind *:5000
+    option httpchk
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+    server patronidemo1 10.0.0.25:5432 maxconn 100 check port 8008
+    server patronidemo2 10.0.0.14:5432 maxconn 100 check port 8008
+
+
+в параметрах listen postgres прописываем сервера patroni, и порт 5000 по еотрому будем подключаться к кластеру через HAProxy
+сам сервис HAProxy будет доступен по порту 7000, если необходимо ssl совдинения в конфиге указывается еще путь до сертификатов.
+
+перзагружаем HAProxy
+ubuntu@patronidemo-haproxy1:~$ sudo service haproxy restart
+
+после этого доступ к высокодоступному кластеру Patroni на базе СУБД PostgreSQL осуществляется через через HAProxy 10.0.0.47:5000
+
+
+```
 
 
 
