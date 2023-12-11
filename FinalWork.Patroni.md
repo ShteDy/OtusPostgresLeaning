@@ -348,11 +348,10 @@ listen postgres
 
 перзагружаем HAProxy
 ubuntu@patronidemo-haproxy1:~$ sudo service haproxy restart
-
-после этого доступ к высокодоступному кластеру Patroni на базе СУБД PostgreSQL осуществляется через через HAProxy 10.0.0.47:5000
-
-
 ```
+## после этого доступ к высокодоступному кластеру Patroni на базе СУБД PostgreSQL осуществляется через через HAProxy 10.0.0.47:5000
+
+
 
 
 
