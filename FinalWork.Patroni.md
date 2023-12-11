@@ -9,9 +9,9 @@
 
 ### Установка и настройка ETCD
 Итак имеем 3 виртуальные машины с адресами:
-#etcd1 10.0.0.29
-#etcd2 10.0.0.31
-#etcd3 10.0.0.20
+etcd1 10.0.0.29
+etcd2 10.0.0.31
+etcd3 10.0.0.20
 
 ```bash
 установка etcd простая
@@ -137,6 +137,180 @@ WantedBy=multi-user.target
 
 перезагружаем сервисы
 ubuntu@patroni1:~$ sudo systemctl daemon-reload
+Добавляем Патрони в запуск при старте ОС
+ubuntu@patroni1:~$ sudo systemctl enable patroni
+Created symlink /etc/systemd/system/multi-user.target.wants/patroni.service → /etc/systemd/system/patroni.service.
+
+Создаем конфигурационный файл patroni.yml
+Sudo nano /etc/patroni.yml
+
+scope: pg-ha-cluster
+name: pp_pg_1
+
+log:
+  level: WARNING
+  format: '%(asctime)s %(levelname)s: %(message)s'
+  dateformat: ''
+  max_queue_size: 1000
+  dir: /var/log/postgresql
+  file_num: 4
+  file_size: 25000000
+  loggers:
+    postgres.postmaster: WARNING
+    urllib3: DEBUG
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: 10.0.0.25:8008
+
+etcd:
+  hosts: 
+  - 10.0.0.29:2379
+  - 10.0.0.31:2379
+  - 10.0.0.20:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 0
+    synchronous_mode: true
+    synchronous_mode_strict: false
+    postgresql:
+#      recovery_conf:
+#        restore_command: /usr/local/bin/restore_wal.sh %p %f
+#        recovery_target_time: '2021-06-11 13:20:00'
+#        recovery_target_action: promote
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        max_connections: 200
+        shared_buffers: 2GB
+        effective_cache_size: 6GB
+        maintenance_work_mem: 512MB
+        checkpoint_completion_target: 0.7
+        wal_buffers: 16MB
+        default_statistics_target: 100
+        random_page_cost: 1.1
+        effective_io_concurrency: 200
+        work_mem: 2621kB
+        min_wal_size: 1GB
+        max_wal_size: 4GB
+        max_worker_processes: 40
+        max_parallel_workers_per_gather: 4
+        max_parallel_workers: 40
+        max_parallel_maintenance_workers: 4
+
+        max_locks_per_transaction: 64
+        max_prepared_transactions: 0
+        wal_level: replica
+        wal_log_hints: on
+        track_commit_timestamp: off
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_segments: 8
+        logging_collector: on
+        log_destination: csvlog
+        log_directory: pg_log
+        log_min_messages: warning
+        log_min_error_statement: error
+        log_min_duration_statement: 1000
+        log_duration: off
+        log_statement: all
+
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host all postgres all md5
+  - host replication repl all md5
+
+  users:
+    postgres:
+      password: mypassword
+      options:
+        - createrole
+        - createdb
+    repl:
+      password: mypassword
+      options:
+        - replication
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: 10.0.0.25:5432
+  data_dir: /var/lib/postgresql/16/main
+  bin_dir: /usr/lib/postgresql/16/bin
+  config_dir: /var/lib/postgresql/16/main
+  pgpass: /var/lib/postgresql/.pgpass
+  pg_hba:
+    - local all all trust
+    - host all postgres all md5
+    - host replication repl all md5
+  authentication:
+    replication:
+      username: repl
+      password: mypassword
+    superuser:
+      username: postgres
+      password: mypassword
+  parameters:
+#    archive_mode: on
+#   archive_command: /usr/local/bin/copy_wal.sh %p %f
+#    archive_timeout: 600
+#    unix_socket_directories: '/var/run/postgresql'
+#    port: 5432![image](https://github.com/ShteDy/OtusPostgresLeaning/assets/124609480/1ee22627-5e35-49c6-a00b-e4f89515aa59)
+
+
+
+нюансы данного конфига:
+1. это yml, потому критичен к синтаксису
+2. этот конфиг прописывается на всех узлах, где установлен Patroni
+3. переменная name уникальна для каждого узла Patroni, Scope - одинаковая
+4. фактически этот файл заменяет конфиги postgressql.conf  и pg_hba.conf (смотри параметры сервера, учетных записей, доступа, логирования и т.д.)
+более подробное описание тут
+https://patroni.readthedocs.io/en/latest/patroni_configuration.html
+
+после этого стартуем сервис Patroni
+ubuntu@patroni1:~$ sudo service patroni start
+проверяем его статус
+ubuntu@patroni1:~$ service patroni status
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/etc/systemd/system/patroni.service; enabled; vendor preset: enabled)
+     Active: active (running) since Mon 2023-12-11 12:32:04 UTC; 4s ago
+   Main PID: 147816 (patroni)
+      Tasks: 14 (limit: 9451)
+     Memory: 104.7M
+     CGroup: /system.slice/patroni.service
+             ├─147816 /usr/bin/python3 /usr/local/bin/patroni /etc/patroni.yml
+             ├─147848 /usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main --config-file=/var/lib/postgresql/16/main/postgresql.conf --listen_addresses>
+             ├─147850 postgres: pg_ha_cluster: logger
+             ├─147851 postgres: pg_ha_cluster: checkpointer
+             ├─147852 postgres: pg_ha_cluster: background writer
+             ├─147853 postgres: pg_ha_cluster: startup recovering 000000080000000000000003
+             ├─147854 postgres: pg_ha_cluster: walreceiver
+             ├─147859 postgres: pg_ha_cluster: postgres postgres 127.0.0.1(36732) idle
+             └─147862 postgres: pg_ha_cluster: postgres postgres 127.0.0.1(36734) idle
+
+Dec 11 12:32:04 patroni1 systemd[1]: Started Runners to orchestrate a high-availability PostgreSQL.
+Dec 11 12:32:05 patroni1 patroni[147849]: localhost:5432 - no response
+Dec 11 12:32:05 patroni1 patroni[147848]: 2023-12-11 12:32:05.827 UTC [147848] LOG:  redirecting log output to logging collector process
+Dec 11 12:32:05 patroni1 patroni[147848]: 2023-12-11 12:32:05.827 UTC [147848] HINT:  Future log output will appear in directory "pg_log".
+Dec 11 12:32:06 patroni1 patroni[147855]: localhost:5432 - accepting connections
+Dec 11 12:32:06 patroni1 patroni[147857]: localhost:5432 - accepting connections
+
+также проверям каталог /var/lib/postgresql/16/main/
+ubuntu@patroni1d:~$ sudo ls /var/lib/postgresql/16/main/
+PG_VERSION  global		  pg_commit_ts	pg_logical    pg_notify    pg_serial	 pg_stat      pg_subtrans  pg_twophase	pg_xact		      postmaster.opts
+base	    patroni.dynamic.json  pg_dynshmem	pg_multixact  pg_replslot  pg_snapshots  pg_stat_tmp  pg_tblspc    pg_wal	postgresql.auto.conf  standby.signal
+ubuntu@patroni1:~$ 
+
+видим, что Patroni создал файлы базы данных. Если необходимо развернуть имеющуюся базу из резервной копии - можно развернуть также как обычно.
+Сервис Patroni заработал. Осталось предоставить к нему доступ
+```
+
+
 
 
 
